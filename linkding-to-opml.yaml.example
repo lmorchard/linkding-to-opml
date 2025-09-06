@@ -1,0 +1,55 @@
+# Example configuration file for linkding-to-opml
+# Copy this to linkding-to-opml.yaml and customize for your setup
+
+# Linkding API configuration
+linkding:
+  # Your Linkding API token (required)
+  token: "your-api-token-here"
+  
+  # Your Linkding server URL (required)
+  url: "https://your-linkding-instance.com"
+  
+  # API timeout (optional, default: 30s)
+  timeout: "30s"
+
+# Cache configuration
+cache:
+  # Cache file path (optional, default: ./linkding-to-opml.gob)
+  file_path: "./linkding-to-opml.gob"
+  
+  # Cache max age in hours (optional, default: 720 = 30 days)
+  max_age: 720
+
+# HTTP client configuration for feed discovery
+http:
+  # HTTP timeout for fetching pages (optional, default: 30s)
+  timeout: "30s"
+  
+  # User-Agent string (optional, default shown below)
+  user_agent: "Mozilla/5.0 (compatible; linkding-to-opml/1.0)"
+  
+  # Maximum number of redirects to follow (optional, default: 3)
+  max_redirects: 3
+
+# Output configuration
+# OPML output file path (optional, default: feeds.opml)
+output: "feeds.opml"
+
+# Processing configuration
+# Default tags to filter by (optional, leave empty for all bookmarks)
+tags:
+  - "rss"
+  - "feeds"
+
+# Number of concurrent workers for feed discovery (optional, default: 16)
+concurrency: 16
+
+# Logging configuration
+# Enable verbose logging (optional, default: false)
+verbose: false
+
+# Enable debug logging (optional, default: false)  
+debug: false
+
+# Suppress summary output (optional, default: false)
+quiet: false
