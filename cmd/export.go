@@ -2,10 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
+	"linkding-to-opml/internal/cache"
 	"linkding-to-opml/internal/config"
+	"linkding-to-opml/internal/feeds"
+	"linkding-to-opml/internal/linkding"
+	"linkding-to-opml/internal/opml"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -77,46 +81,85 @@ func runExport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("configuration validation failed: %w", err)
 	}
 
-	// Print configuration summary for now
-	fmt.Printf("Linkding-to-OPML Export Configuration:\n")
-	fmt.Printf("  Linkding URL: %s\n", cfg.Linkding.URL)
-	fmt.Printf("  API Token: %s...\n", maskToken(cfg.Linkding.Token))
-	fmt.Printf("  API Timeout: %s\n", cfg.Linkding.Timeout)
-	fmt.Printf("  Output File: %s\n", cfg.Output)
-	fmt.Printf("  Cache File: %s\n", cfg.Cache.FilePath)
-	fmt.Printf("  Cache Max-Age: %d hours\n", cfg.Cache.MaxAge)
-	fmt.Printf("  Concurrency: %d\n", cfg.Concurrency)
-	fmt.Printf("  HTTP Timeout: %s\n", cfg.HTTP.Timeout)
-	fmt.Printf("  User-Agent: %s\n", cfg.HTTP.UserAgent)
-	fmt.Printf("  Max Redirects: %d\n", cfg.HTTP.MaxRedirects)
-	
-	if len(cfg.Tags) > 0 {
-		fmt.Printf("  Filter Tags: %s\n", strings.Join(cfg.Tags, ", "))
-	} else {
-		fmt.Printf("  Filter Tags: (all bookmarks)\n")
+	logrus.Info("Starting linkding-to-opml export process")
+
+	// Step 1: Initialize cache
+	logrus.Debug("Initializing cache")
+	cache := cache.NewCache(cfg.Cache.FilePath)
+	if err := cache.LoadCache(); err != nil {
+		return fmt.Errorf("failed to load cache: %w", err)
 	}
 
-	fmt.Printf("  Logging: ")
-	if cfg.Debug {
-		fmt.Printf("DEBUG\n")
-	} else if cfg.Verbose {
-		fmt.Printf("VERBOSE\n")
-	} else if cfg.Quiet {
-		fmt.Printf("QUIET\n")
-	} else {
-		fmt.Printf("NORMAL\n")
+	// Step 2: Create Linkding API client
+	logrus.Debug("Creating Linkding API client")
+	linkdingClient, err := linkding.NewClient(cfg.Linkding.Token, cfg.Linkding.URL, cfg.Linkding.Timeout)
+	if err != nil {
+		return fmt.Errorf("failed to create Linkding client: %w", err)
 	}
 
-	// TODO: Implement actual export logic in subsequent steps
-	fmt.Printf("\n[TODO] Export logic will be implemented in subsequent steps\n")
+	// Step 3: Fetch bookmarks from Linkding
+	logrus.Info("Fetching bookmarks from Linkding API")
+	bookmarks, err := linkdingClient.FetchBookmarks(cfg.Tags)
+	if err != nil {
+		return fmt.Errorf("failed to fetch bookmarks: %w", err)
+	}
+
+	if len(bookmarks) == 0 {
+		logrus.Warn("No bookmarks found matching the specified criteria")
+		if !cfg.Quiet {
+			fmt.Println("No bookmarks found. Nothing to export.")
+		}
+		return nil
+	}
+
+	// Step 4: Process bookmarks with concurrent feed discovery
+	logrus.WithField("bookmark_count", len(bookmarks)).Info("Starting feed discovery")
 	
+	processingConfig := feeds.ProcessingConfig{
+		Concurrency: cfg.Concurrency,
+		MaxAge:      cfg.Cache.MaxAge,
+		UserAgent:   cfg.HTTP.UserAgent,
+		HTTPConfig: feeds.HTTPConfig{
+			Timeout:      cfg.HTTP.Timeout,
+			UserAgent:    cfg.HTTP.UserAgent,
+			MaxRedirects: cfg.HTTP.MaxRedirects,
+		},
+		Verbose: cfg.Verbose,
+	}
+
+	results, stats := feeds.ProcessBookmarks(bookmarks, cache, processingConfig)
+
+	if len(results) == 0 {
+		logrus.Warn("No feeds discovered from bookmarks")
+		if !cfg.Quiet {
+			fmt.Println("No feeds were discovered from the bookmarks. No OPML file will be created.")
+		}
+		return nil
+	}
+
+	// Step 5: Generate OPML
+	logrus.WithField("feed_count", len(results)).Info("Generating OPML document")
+	opmlDoc := opml.GenerateOPML(results, "Feeds exported from Linkding")
+
+	// Step 6: Validate OPML
+	if err := opml.ValidateOPML(opmlDoc); err != nil {
+		return fmt.Errorf("generated OPML is invalid: %w", err)
+	}
+
+	// Step 7: Write OPML file
+	logrus.WithField("output_file", cfg.Output).Info("Writing OPML file")
+	if err := opml.WriteOPML(opmlDoc, cfg.Output); err != nil {
+		return fmt.Errorf("failed to write OPML file: %w", err)
+	}
+
+	// Step 8: Display summary statistics
+	if !cfg.Quiet {
+		summary := stats.FormatProcessingSummary(false)
+		fmt.Println(summary)
+		fmt.Printf("OPML file written to: %s\n", cfg.Output)
+	}
+
+	logrus.Info("Export process completed successfully")
 	return nil
 }
 
-// maskToken shows only the first 8 characters of the token for security
-func maskToken(token string) string {
-	if len(token) <= 8 {
-		return "****"
-	}
-	return token[:8] + "****"
-}
