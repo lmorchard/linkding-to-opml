@@ -42,7 +42,7 @@ type Config struct {
 	Verbose bool `mapstructure:"verbose"`
 	Debug   bool `mapstructure:"debug"`
 	Quiet   bool `mapstructure:"quiet"`
-	
+
 	// Debug settings
 	SaveFailedHTML bool   `mapstructure:"save_failed_html"`
 	DebugOutputDir string `mapstructure:"debug_output_dir"`

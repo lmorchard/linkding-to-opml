@@ -22,13 +22,13 @@ type OPML struct {
 
 // Head contains metadata about the OPML document
 type Head struct {
-	XMLName     xml.Name `xml:"head"`
-	Title       string   `xml:"title"`
-	DateCreated string   `xml:"dateCreated,omitempty"`
-	DateModified string  `xml:"dateModified,omitempty"`
-	OwnerName   string   `xml:"ownerName,omitempty"`
-	OwnerEmail  string   `xml:"ownerEmail,omitempty"`
-	Docs        string   `xml:"docs,omitempty"`
+	XMLName      xml.Name `xml:"head"`
+	Title        string   `xml:"title"`
+	DateCreated  string   `xml:"dateCreated,omitempty"`
+	DateModified string   `xml:"dateModified,omitempty"`
+	OwnerName    string   `xml:"ownerName,omitempty"`
+	OwnerEmail   string   `xml:"ownerEmail,omitempty"`
+	Docs         string   `xml:"docs,omitempty"`
 }
 
 // Body contains the outline elements
@@ -55,7 +55,7 @@ func GenerateOPML(results []*feeds.FeedDiscoveryResult, title string) *OPML {
 	}).Debug("Generating OPML document")
 
 	now := time.Now().Format(time.RFC1123)
-	
+
 	opml := &OPML{
 		Version: "2.0",
 		Head: Head{
@@ -80,9 +80,9 @@ func GenerateOPML(results []*feeds.FeedDiscoveryResult, title string) *OPML {
 				HTMLURL: result.URL,
 				Type:    "rss", // Default to RSS type for feed readers
 			}
-			
+
 			opml.Body.Outlines = append(opml.Body.Outlines, outline)
-			
+
 			logrus.WithFields(logrus.Fields{
 				"feed_title": result.FeedTitle,
 				"feed_url":   result.FeedURL,
@@ -92,7 +92,7 @@ func GenerateOPML(results []*feeds.FeedDiscoveryResult, title string) *OPML {
 	}
 
 	logrus.WithField("outline_count", len(opml.Body.Outlines)).Info("Generated OPML document")
-	
+
 	return opml
 }
 
@@ -103,7 +103,7 @@ func WriteOPML(opml *OPML, filePath string) error {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(filePath)
 	if dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
@@ -168,18 +168,18 @@ func ValidateOPML(opml *OPML) error {
 		if outline.XMLURL == "" {
 			return fmt.Errorf("outline %d is missing xmlUrl attribute", i)
 		}
-		
+
 		if outline.HTMLURL == "" {
 			return fmt.Errorf("outline %d is missing htmlUrl attribute", i)
 		}
-		
+
 		if outline.Title == "" && outline.Text == "" {
 			logrus.WithField("outline_index", i).Warn("Outline has no title or text")
 		}
 	}
 
 	logrus.WithField("outline_count", len(opml.Body.Outlines)).Debug("OPML validation passed")
-	
+
 	return nil
 }
 

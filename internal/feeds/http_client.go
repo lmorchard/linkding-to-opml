@@ -29,7 +29,7 @@ func NewHTTPClient(config HTTPConfig) *HTTPClient {
 	redirectPolicy := func(req *http.Request, via []*http.Request) error {
 		if len(via) >= config.MaxRedirects {
 			logrus.WithFields(logrus.Fields{
-				"url":           req.URL.String(),
+				"url":            req.URL.String(),
 				"redirect_count": len(via),
 				"max_redirects":  config.MaxRedirects,
 			}).Debug("HTTP request exceeded maximum redirects")
@@ -66,7 +66,7 @@ func (h *HTTPClient) FetchPage(url, userAgent string) (string, error) {
 
 	// Set User-Agent header
 	req.Header.Set("User-Agent", userAgent)
-	
+
 	// Set additional headers that make us look more like a browser
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
@@ -98,7 +98,7 @@ func (h *HTTPClient) FetchPage(url, userAgent string) (string, error) {
 	// Handle compressed content
 	var reader io.Reader = resp.Body
 	contentEncoding := resp.Header.Get("Content-Encoding")
-	
+
 	if strings.Contains(contentEncoding, "gzip") {
 		gzipReader, err := gzip.NewReader(resp.Body)
 		if err != nil {
@@ -106,7 +106,7 @@ func (h *HTTPClient) FetchPage(url, userAgent string) (string, error) {
 		}
 		defer gzipReader.Close()
 		reader = gzipReader
-		
+
 		logrus.WithField("url", url).Debug("Decompressing gzip content")
 	}
 
