@@ -17,12 +17,12 @@ type ProcessingStats struct {
 	NewDiscoveries    int64 `json:"new_discoveries"`
 	SuccessfulFeeds   int64 `json:"successful_feeds"`
 	FailedDiscoveries int64 `json:"failed_discoveries"`
-	
+
 	// Timing
 	StartTime      time.Time     `json:"start_time"`
 	EndTime        time.Time     `json:"end_time,omitempty"`
 	ProcessingTime time.Duration `json:"processing_time"`
-	
+
 	// Progress tracking
 	mu               sync.RWMutex
 	progressCallback func(processed, total int64, url string, success bool)
@@ -59,13 +59,13 @@ func (st *StatTracker) RecordCacheHit(url string) {
 // RecordNewDiscovery increments the new discovery counter
 func (st *StatTracker) RecordNewDiscovery(url string, success bool) {
 	atomic.AddInt64(&st.stats.NewDiscoveries, 1)
-	
+
 	if success {
 		atomic.AddInt64(&st.stats.SuccessfulFeeds, 1)
 	} else {
 		atomic.AddInt64(&st.stats.FailedDiscoveries, 1)
 	}
-	
+
 	st.reportProgress(url, success)
 }
 
@@ -74,7 +74,7 @@ func (st *StatTracker) reportProgress(url string, success bool) {
 	st.stats.mu.RLock()
 	callback := st.stats.progressCallback
 	st.stats.mu.RUnlock()
-	
+
 	if callback != nil {
 		processed := atomic.LoadInt64(&st.stats.CacheHits) + atomic.LoadInt64(&st.stats.NewDiscoveries)
 		callback(processed, st.stats.TotalBookmarks, url, success)
@@ -85,7 +85,7 @@ func (st *StatTracker) reportProgress(url string, success bool) {
 func (st *StatTracker) Finish() {
 	st.stats.EndTime = time.Now()
 	st.stats.ProcessingTime = st.stats.EndTime.Sub(st.stats.StartTime)
-	
+
 	logrus.WithFields(logrus.Fields{
 		"total_bookmarks":    st.stats.TotalBookmarks,
 		"cache_hits":         st.stats.CacheHits,
@@ -115,15 +115,15 @@ func (st *StatTracker) FormatSummary(quiet bool) string {
 	if quiet {
 		return ""
 	}
-	
+
 	stats := st.GetStats()
-	
+
 	return fmt.Sprintf("Found %d feeds from %d bookmarks, %d cached, %d newly discovered, %d failed (Processing time: %v)",
-		stats.SuccessfulFeeds, 
-		stats.TotalBookmarks, 
-		stats.CacheHits, 
-		stats.NewDiscoveries, 
-		stats.FailedDiscoveries, 
+		stats.SuccessfulFeeds,
+		stats.TotalBookmarks,
+		stats.CacheHits,
+		stats.NewDiscoveries,
+		stats.FailedDiscoveries,
 		stats.ProcessingTime.Round(time.Second))
 }
 
@@ -133,14 +133,14 @@ func FormatProgressUpdate(processed, total int64, url string, success bool) stri
 	if !success {
 		status = "✗"
 	}
-	
+
 	return fmt.Sprintf("[%d/%d] %s %s", processed, total, status, url)
 }
 
 // LogVerboseProgress logs detailed progress information
 func (st *StatTracker) LogVerboseProgress(processed, total int64, url string, success bool, feedURL, feedTitle string) {
 	progress := fmt.Sprintf("%d/%d", processed, total)
-	
+
 	if success {
 		logrus.WithFields(logrus.Fields{
 			"progress":   progress,
@@ -167,7 +167,7 @@ func (st *StatTracker) GetSuccessRate() float64 {
 	if processed == 0 {
 		return 0.0
 	}
-	
+
 	successful := atomic.LoadInt64(&st.stats.SuccessfulFeeds)
 	return float64(successful) / float64(processed) * 100.0
 }

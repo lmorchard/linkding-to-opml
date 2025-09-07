@@ -118,7 +118,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 
 	// Step 4: Process bookmarks with concurrent feed discovery
 	logrus.WithField("bookmark_count", len(bookmarks)).Info("Starting feed discovery")
-	
+
 	processingConfig := feeds.ProcessingConfig{
 		Concurrency: cfg.Concurrency,
 		MaxAge:      cfg.Cache.MaxAge,
@@ -168,4 +168,3 @@ func runExport(cmd *cobra.Command, args []string) error {
 	logrus.Info("Export process completed successfully")
 	return nil
 }
-

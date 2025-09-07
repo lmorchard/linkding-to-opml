@@ -109,7 +109,7 @@ func (c *Client) matchesTags(bookmark *Bookmark, requiredTags []string) bool {
 	for _, requiredTag := range requiredTags {
 		if !bookmarkTags[strings.ToLower(requiredTag)] {
 			logrus.WithFields(logrus.Fields{
-				"url":          bookmark.URL,
+				"url":           bookmark.URL,
 				"bookmark_tags": bookmark.Tags,
 				"required_tags": requiredTags,
 				"missing_tag":   requiredTag,
@@ -119,7 +119,7 @@ func (c *Client) matchesTags(bookmark *Bookmark, requiredTags []string) bool {
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"url":          bookmark.URL,
+		"url":           bookmark.URL,
 		"bookmark_tags": bookmark.Tags,
 		"required_tags": requiredTags,
 	}).Debug("Bookmark matches tag filter")
