@@ -53,3 +53,10 @@ debug: false
 
 # Suppress summary output (optional, default: false)
 quiet: false
+
+# Debug options
+# Save HTML content of failed feed discoveries for debugging (optional, default: false)
+save_failed_html: false
+
+# Directory to save debug output (optional, default: ./debug)
+debug_output_dir: "./debug"

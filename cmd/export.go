@@ -53,6 +53,8 @@ func init() {
 	exportCmd.Flags().String("linkding-url", "", "Linkding server URL (required)")
 	exportCmd.Flags().String("linkding-timeout", "", "Linkding API timeout (default: 30s)")
 	exportCmd.Flags().IntP("concurrency", "c", 0, "Number of concurrent workers (default: 16)")
+	exportCmd.Flags().Bool("save-failed-html", false, "Save HTML content of failed feed discoveries for debugging")
+	exportCmd.Flags().String("debug-output-dir", "", "Directory to save debug output (default: ./debug)")
 
 	// Bind flags to viper
 	viper.BindPFlag("tags", exportCmd.Flags().Lookup("tags"))
@@ -63,6 +65,8 @@ func init() {
 	viper.BindPFlag("linkding.url", exportCmd.Flags().Lookup("linkding-url"))
 	viper.BindPFlag("linkding.timeout", exportCmd.Flags().Lookup("linkding-timeout"))
 	viper.BindPFlag("concurrency", exportCmd.Flags().Lookup("concurrency"))
+	viper.BindPFlag("save_failed_html", exportCmd.Flags().Lookup("save-failed-html"))
+	viper.BindPFlag("debug_output_dir", exportCmd.Flags().Lookup("debug-output-dir"))
 }
 
 func runExport(cmd *cobra.Command, args []string) error {
@@ -124,7 +128,9 @@ func runExport(cmd *cobra.Command, args []string) error {
 			UserAgent:    cfg.HTTP.UserAgent,
 			MaxRedirects: cfg.HTTP.MaxRedirects,
 		},
-		Verbose: cfg.Verbose,
+		Verbose:        cfg.Verbose,
+		SaveFailedHTML: cfg.SaveFailedHTML,
+		DebugOutputDir: cfg.DebugOutputDir,
 	}
 
 	results, stats := feeds.ProcessBookmarks(bookmarks, cache, processingConfig)

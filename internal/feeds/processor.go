@@ -13,11 +13,13 @@ import (
 
 // ProcessingConfig holds configuration for bookmark processing
 type ProcessingConfig struct {
-	Concurrency int
-	MaxAge      int
-	UserAgent   string
-	HTTPConfig  HTTPConfig
-	Verbose     bool
+	Concurrency    int
+	MaxAge         int
+	UserAgent      string
+	HTTPConfig     HTTPConfig
+	Verbose        bool
+	SaveFailedHTML bool
+	DebugOutputDir string
 }
 
 // ProcessingStats holds statistics about the processing operation
@@ -173,7 +175,7 @@ func processBookmark(bookmark *linkding.Bookmark, cache *cache.Cache, httpClient
 	
 	logrus.WithField("url", bookmark.URL).Debug("Performing new feed discovery")
 	
-	result := DiscoverFeed(bookmark.URL, httpClient, config.UserAgent)
+	result := DiscoverFeedWithDebug(bookmark.URL, httpClient, config.UserAgent, config.SaveFailedHTML, config.DebugOutputDir)
 	
 	// Update cache with result
 	if result.IsSuccessful() {

@@ -42,6 +42,10 @@ type Config struct {
 	Verbose bool `mapstructure:"verbose"`
 	Debug   bool `mapstructure:"debug"`
 	Quiet   bool `mapstructure:"quiet"`
+	
+	// Debug settings
+	SaveFailedHTML bool   `mapstructure:"save_failed_html"`
+	DebugOutputDir string `mapstructure:"debug_output_dir"`
 }
 
 // LoadConfig loads configuration from file and merges with command-line flags
@@ -55,6 +59,8 @@ func LoadConfig(configFile string) (*Config, error) {
 	viper.SetDefault("http.user_agent", "Mozilla/5.0 (compatible; linkding-to-opml/1.0)")
 	viper.SetDefault("http.max_redirects", 3)
 	viper.SetDefault("linkding.timeout", "30s")
+	viper.SetDefault("save_failed_html", false)
+	viper.SetDefault("debug_output_dir", "./debug")
 
 	// Set config file
 	if configFile != "" {
