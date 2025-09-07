@@ -1,9 +1,11 @@
 package feeds
 
 import (
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -93,17 +95,34 @@ func (h *HTTPClient) FetchPage(url, userAgent string) (string, error) {
 		return "", fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
 	}
 
+	// Handle compressed content
+	var reader io.Reader = resp.Body
+	contentEncoding := resp.Header.Get("Content-Encoding")
+	
+	if strings.Contains(contentEncoding, "gzip") {
+		gzipReader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("failed to create gzip reader: %w", err)
+		}
+		defer gzipReader.Close()
+		reader = gzipReader
+		
+		logrus.WithField("url", url).Debug("Decompressing gzip content")
+	}
+
 	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(reader)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"url":         url,
-		"status_code": resp.StatusCode,
-		"body_size":   len(body),
-		"content_type": resp.Header.Get("Content-Type"),
+		"url":              url,
+		"status_code":      resp.StatusCode,
+		"body_size":        len(body),
+		"content_type":     resp.Header.Get("Content-Type"),
+		"content_encoding": contentEncoding,
+		"was_compressed":   strings.Contains(contentEncoding, "gzip"),
 	}).Debug("Successfully fetched web page")
 
 	return string(body), nil
