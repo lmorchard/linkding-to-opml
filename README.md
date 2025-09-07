@@ -128,40 +128,6 @@ All configuration options can be overridden with command-line flags:
 ./linkding-to-opml export --concurrency 8  # Use 8 workers instead of 16
 ```
 
-## How It Works
-
-1. **Fetch Bookmarks**: Connects to your Linkding instance and fetches bookmarks (optionally filtered by tags)
-
-2. **Check Cache**: For each bookmark URL, checks if we've already discovered feeds recently (within max-age)
-
-3. **Discover Feeds**: For uncached URLs, fetches the webpage and looks for RSS/Atom feed links using standard autodiscovery methods
-
-4. **Extract Feed Info**: Fetches discovered feed URLs and extracts feed titles
-
-5. **Generate OPML**: Creates an OPML 2.0 document with:
-   - `title`: Feed title from feed metadata
-   - `xmlUrl`: Discovered feed URL
-   - `htmlUrl`: Original bookmark URL
-
-6. **Save Results**: Writes the OPML file and updates the cache
-
-## Error Handling
-
-The tool handles various error conditions gracefully:
-
-- **Network errors**: Logs warnings and continues processing other bookmarks
-- **No feeds found**: Logs warnings but doesn't stop the process
-- **Malformed feeds**: Skips invalid feeds and continues
-- **API errors**: Stops processing with clear error messages
-- **File permission errors**: Clear error messages with suggestions
-
-## Performance Tips
-
-- **Concurrent processing**: Adjust `--concurrency` based on your system and network
-- **Cache utilization**: Regular runs benefit from cached feed discoveries
-- **Tag filtering**: Use specific tags to process fewer bookmarks
-- **Network timeout**: Increase HTTP timeout for slow networks
-
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
