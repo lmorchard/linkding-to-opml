@@ -4,13 +4,13 @@ A command-line tool that fetches bookmarks from your [Linkding](https://github.c
 
 ## Features
 
-- = Fetches bookmarks from Linkding API with optional tag filtering
-- = Automatically discovers RSS/Atom feeds using standard autodiscovery methods
-- ¡ Concurrent processing for fast operation (configurable worker pool)
-- =¾ Intelligent caching system to avoid repeated network requests
-- =Ä Generates OPML 2.0 compatible files
-- =á Comprehensive error handling and logging
-- ™ Flexible configuration via YAML files or command-line flags
+- ğŸ”— Fetches bookmarks from Linkding API with optional tag filtering
+- ğŸ“¡ Automatically discovers RSS/Atom feeds using standard autodiscovery methods
+- âš¡ Concurrent processing for fast operation (configurable worker pool)
+- ğŸ’¾ Intelligent caching system to avoid repeated network requests
+- ğŸ“„ Generates OPML 2.0 compatible files
+- ğŸ›¡ï¸ Comprehensive error handling and logging
+- âš™ï¸ Flexible configuration via YAML files or command-line flags
 
 ## Installation
 
