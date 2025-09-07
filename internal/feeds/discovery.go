@@ -70,6 +70,19 @@ func DiscoverFeedWithDebug(pageURL string, httpClient *HTTPClient, userAgent str
 		"content_preview": getContentPreview(pageContent, 200),
 	}).Debug("Successfully fetched page for feed discovery")
 
+	// Step 1.5: Check if pageContent is itself an RSS/Atom feed
+	if feedTitle, err := extractFeedTitle(pageContent); err == nil {
+		result.FeedURL = pageURL
+		result.FeedTitle = feedTitle
+
+		logrus.WithFields(logrus.Fields{
+			"page_url":   pageURL,
+			"feed_title": feedTitle,
+		}).Info("Page URL is itself a feed")
+
+		return result
+	}
+
 	// Step 2: Parse HTML and find feed links
 	feedURLs := findFeedLinks(pageContent, pageURL)
 	if len(feedURLs) == 0 {
