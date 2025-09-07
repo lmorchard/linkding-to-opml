@@ -74,7 +74,6 @@ func ProcessBookmarks(bookmarks []*linkding.Bookmark, cache *cache.Cache, config
 
 	// Collect results
 	var successful []*FeedDiscoveryResult
-	var failed []*FeedDiscoveryResult
 
 	processedCount := 0
 	for result := range resultChan {
@@ -101,7 +100,6 @@ func ProcessBookmarks(bookmarks []*linkding.Bookmark, cache *cache.Cache, config
 			successful = append(successful, result)
 			stats.SuccessfulFeeds++
 		} else {
-			failed = append(failed, result)
 			stats.FailedDiscoveries++
 		}
 	}

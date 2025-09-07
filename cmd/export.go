@@ -57,16 +57,16 @@ func init() {
 	exportCmd.Flags().String("debug-output-dir", "", "Directory to save debug output (default: ./debug)")
 
 	// Bind flags to viper
-	viper.BindPFlag("tags", exportCmd.Flags().Lookup("tags"))
-	viper.BindPFlag("output", exportCmd.Flags().Lookup("output"))
-	viper.BindPFlag("cache.file_path", exportCmd.Flags().Lookup("cache"))
-	viper.BindPFlag("cache.max_age", exportCmd.Flags().Lookup("max-age"))
-	viper.BindPFlag("linkding.token", exportCmd.Flags().Lookup("linkding-token"))
-	viper.BindPFlag("linkding.url", exportCmd.Flags().Lookup("linkding-url"))
-	viper.BindPFlag("linkding.timeout", exportCmd.Flags().Lookup("linkding-timeout"))
-	viper.BindPFlag("concurrency", exportCmd.Flags().Lookup("concurrency"))
-	viper.BindPFlag("save_failed_html", exportCmd.Flags().Lookup("save-failed-html"))
-	viper.BindPFlag("debug_output_dir", exportCmd.Flags().Lookup("debug-output-dir"))
+	_ = viper.BindPFlag("tags", exportCmd.Flags().Lookup("tags"))
+	_ = viper.BindPFlag("output", exportCmd.Flags().Lookup("output"))
+	_ = viper.BindPFlag("cache.file_path", exportCmd.Flags().Lookup("cache"))
+	_ = viper.BindPFlag("cache.max_age", exportCmd.Flags().Lookup("max-age"))
+	_ = viper.BindPFlag("linkding.token", exportCmd.Flags().Lookup("linkding-token"))
+	_ = viper.BindPFlag("linkding.url", exportCmd.Flags().Lookup("linkding-url"))
+	_ = viper.BindPFlag("linkding.timeout", exportCmd.Flags().Lookup("linkding-timeout"))
+	_ = viper.BindPFlag("concurrency", exportCmd.Flags().Lookup("concurrency"))
+	_ = viper.BindPFlag("save_failed_html", exportCmd.Flags().Lookup("save-failed-html"))
+	_ = viper.BindPFlag("debug_output_dir", exportCmd.Flags().Lookup("debug-output-dir"))
 }
 
 func runExport(cmd *cobra.Command, args []string) error {
