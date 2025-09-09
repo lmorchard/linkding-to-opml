@@ -11,6 +11,7 @@ import (
 
 // Bookmark represents a bookmark from Linkding
 type Bookmark struct {
+	ID    int      `json:"id"`
 	URL   string   `json:"url"`
 	Title string   `json:"title"`
 	Tags  []string `json:"tags"`
@@ -68,6 +69,7 @@ func (c *Client) FetchBookmarks(tags []string) ([]*Bookmark, error) {
 		copy(bookmarkTags, bookmark.TagNames)
 
 		internalBookmark := &Bookmark{
+			ID:    bookmark.ID,
 			URL:   bookmark.URL,
 			Title: bookmark.Title,
 			Tags:  bookmarkTags,
@@ -125,4 +127,105 @@ func (c *Client) matchesTags(bookmark *Bookmark, requiredTags []string) bool {
 	}).Debug("Bookmark matches tag filter")
 
 	return true
+}
+
+// CreateBookmark creates a new bookmark in Linkding
+func (c *Client) CreateBookmark(url, title, description string, tags []string) (*Bookmark, error) {
+	logrus.WithFields(logrus.Fields{
+		"url":   url,
+		"title": title,
+		"tags":  tags,
+	}).Debug("Creating bookmark in Linkding")
+
+	request := linkding.CreateBookmarkRequest{
+		URL:         url,
+		Title:       title,
+		Description: description,
+		TagNames:    tags,
+		IsArchived:  false,
+		Unread:      false,
+		Shared:      false,
+	}
+
+	bookmark, err := c.client.CreateBookmark(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bookmark: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"id":    bookmark.ID,
+		"url":   bookmark.URL,
+		"title": bookmark.Title,
+	}).Info("Successfully created bookmark")
+
+	// Convert to internal format
+	return &Bookmark{
+		ID:    bookmark.ID,
+		URL:   bookmark.URL,
+		Title: bookmark.Title,
+		Tags:  bookmark.TagNames,
+	}, nil
+}
+
+// GetBookmarkByURL checks if a bookmark with the given URL already exists
+func (c *Client) GetBookmarkByURL(url string) (*Bookmark, error) {
+	logrus.WithField("url", url).Debug("Checking if bookmark exists by URL")
+
+	response, err := c.client.CheckBookmark(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check bookmark: %w", err)
+	}
+
+	// CheckBookmark returns nil bookmark if not found
+	if response.Bookmark == nil {
+		logrus.WithField("url", url).Debug("Bookmark not found")
+		return nil, nil
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"id":    response.Bookmark.ID,
+		"url":   response.Bookmark.URL,
+		"title": response.Bookmark.Title,
+	}).Debug("Found existing bookmark")
+
+	// Convert to internal format
+	return &Bookmark{
+		ID:    response.Bookmark.ID,
+		URL:   response.Bookmark.URL,
+		Title: response.Bookmark.Title,
+		Tags:  response.Bookmark.TagNames,
+	}, nil
+}
+
+// UpdateBookmark updates an existing bookmark in Linkding
+func (c *Client) UpdateBookmark(id int, url, title, description string, tags []string) error {
+	logrus.WithFields(logrus.Fields{
+		"id":    id,
+		"url":   url,
+		"title": title,
+		"tags":  tags,
+	}).Debug("Updating bookmark in Linkding")
+
+	request := linkding.CreateBookmarkRequest{
+		URL:         url,
+		Title:       title,
+		Description: description,
+		TagNames:    tags,
+		IsArchived:  false,
+		Unread:      false,
+		Shared:      false,
+	}
+
+	_, err := c.client.UpdateBookmark(id, request)
+	if err != nil {
+		return fmt.Errorf("failed to update bookmark: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"id":    id,
+		"url":   url,
+		"title": title,
+	}).Info("Successfully updated bookmark")
+
+	return nil
 }

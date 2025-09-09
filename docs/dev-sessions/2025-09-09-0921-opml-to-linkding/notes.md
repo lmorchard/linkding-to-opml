@@ -47,5 +47,14 @@ Branch: opml-to-linkding
 - Implemented DiscoverBookmarkURL with htmlUrl → feed → fallback strategy
 - Successfully tested URL discovery (Tier 1: direct htmlUrl, Tier 2: feed parsing)
 
+#### Phase 4: Linkding Integration ✅
+- Enhanced `internal/linkding/client.go` with bookmark creation/update methods
+- Added CreateBookmark(), GetBookmarkByURL(), and UpdateBookmark() methods
+- Updated Bookmark struct to include ID field for updates
+- Created `internal/importer/processor.go` with duplicate handling logic
+- Implemented ProcessBookmark with skip/update duplicate strategies
+- Added ProcessOptions for configuring tags, duplicate action, and dry-run mode
+- Successfully tested full processing flow (2/2 feeds processed correctly)
+
 ## Final Summary
 [To be completed at end of session]

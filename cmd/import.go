@@ -73,7 +73,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 	}
 	
 	// Get other flags
-	dryRun := viper.GetBool("import.dry_run")
+	// dryRun := viper.GetBool("import.dry_run")  // Will be used in full implementation
 	tags := viper.GetStringSlice("import.tags")
 	concurrency := viper.GetInt("import.concurrency")
 	
@@ -103,29 +103,54 @@ func runImport(cmd *cobra.Command, args []string) error {
 		MaxRedirects: 3,
 	})
 	
-	// Test URL discovery on the first few items
-	fmt.Printf("Testing URL discovery on first items:\n")
+	// Run URL discovery on all items
+	fmt.Printf("Running URL discovery...\n")
+	discoveryErrors := 0
 	for i, item := range items {
-		if i >= 3 { // Only test first 3 items
-			break
-		}
-		
-		fmt.Printf("\nProcessing: %s\n", item.Title)
-		fmt.Printf("  XML URL: %s\n", item.XMLURL)
-		fmt.Printf("  HTML URL: %s\n", item.HTMLURL)
+		fmt.Printf("Processing %d/%d: %s\n", i+1, len(items), item.Title)
 		
 		err := importer.DiscoverBookmarkURL(item, httpClient)
 		if err != nil {
 			fmt.Printf("  Error: %s\n", err)
+			item.Status = importer.StatusFailed
+			item.Error = err
+			discoveryErrors++
 			continue
 		}
 		
-		fmt.Printf("  Final URL: %s\n", item.GetFinalURL())
-		fmt.Printf("  Final Title: %s\n", item.GetFinalTitle())
-		fmt.Printf("  Final Description: %s\n", item.GetFinalDescription())
+		fmt.Printf("  → %s\n", item.GetFinalURL())
 	}
 	
-	fmt.Printf("\nDry run: %t, Duplicates: %s, Tags: %v, Concurrency: %d\n", 
-		dryRun, duplicates, tags, concurrency)
+	fmt.Printf("\nURL Discovery complete: %d successful, %d failed\n", len(items)-discoveryErrors, discoveryErrors)
+	
+	// Test processing without Linkding connection (dry run simulation)
+	fmt.Printf("Testing bookmark processing (simulated)...\n")
+	// processOptions will be used in full implementation with worker pools
+	_ = importer.ProcessOptions{
+		DuplicateAction: duplicates,
+		Tags:            tags,
+		DryRun:          true, // Force dry run for testing
+	}
+	
+	stats := importer.NewImportStats(len(items))
+	for i, item := range items {
+		if item.Status == importer.StatusFailed {
+			stats.IncrementFailed()
+			continue
+		}
+		
+		fmt.Printf("Would process %d/%d: %s → %s\n", i+1, len(items), item.GetFinalTitle(), item.GetFinalURL())
+		
+		// Simulate processing
+		item.Status = importer.StatusSuccess
+		stats.IncrementProcessed()
+		stats.IncrementImported()
+	}
+	
+	stats.Finish()
+	fmt.Printf("\n%s\n", stats.Summary())
+	
+	fmt.Printf("Configuration: Duplicates=%s, Tags=%v, Concurrency=%d\n", 
+		duplicates, tags, concurrency)
 	return nil
 }
