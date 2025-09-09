@@ -44,8 +44,9 @@ type ImportItem struct {
 	DiscoveredDescription string
 
 	// Processing state
-	Status ImportStatus
-	Error  error
+	Status     ImportStatus
+	Error      error
+	WasUpdated bool // True if this was an update rather than a new import
 }
 
 // UpdateWithDiscoveredData updates the item with discovered URL and metadata

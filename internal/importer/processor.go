@@ -2,7 +2,9 @@ package importer
 
 import (
 	"fmt"
+	"sync"
 
+	"linkding-to-opml/internal/feeds"
 	"linkding-to-opml/internal/linkding"
 
 	"github.com/sirupsen/logrus"
@@ -30,10 +32,18 @@ func ProcessBookmark(item *ImportItem, client *linkding.Client, options ProcessO
 		return fmt.Errorf("no valid URL found for bookmark")
 	}
 
-	// Check if bookmark already exists
-	existing, err := client.GetBookmarkByURL(finalURL)
-	if err != nil {
-		return fmt.Errorf("failed to check for existing bookmark: %w", err)
+	// Check if bookmark already exists (skip in dry-run mode or if client is nil)
+	var existing *linkding.Bookmark
+	var err error
+	
+	if !options.DryRun && client != nil {
+		existing, err = client.GetBookmarkByURL(finalURL)
+		if err != nil {
+			return fmt.Errorf("failed to check for existing bookmark: %w", err)
+		}
+	} else {
+		// In dry-run mode, simulate no existing bookmarks
+		existing = nil
 	}
 
 	// Prepare the tags (combine item-specific tags with global tags)
@@ -67,27 +77,35 @@ func ProcessBookmark(item *ImportItem, client *linkding.Client, options ProcessO
 					"title": item.GetFinalTitle(),
 				}).Info("Would update existing bookmark (dry run)")
 			} else {
-				err := client.UpdateBookmark(
-					existing.ID,
-					finalURL,
-					item.GetFinalTitle(),
-					item.GetFinalDescription(),
-					allTags,
-				)
-				if err != nil {
-					item.Status = StatusFailed
-					item.Error = err
-					return fmt.Errorf("failed to update bookmark: %w", err)
-				}
+				if client != nil {
+					err := client.UpdateBookmark(
+						existing.ID,
+						finalURL,
+						item.GetFinalTitle(),
+						item.GetFinalDescription(),
+						allTags,
+					)
+					if err != nil {
+						item.Status = StatusFailed
+						item.Error = err
+						return fmt.Errorf("failed to update bookmark: %w", err)
+					}
 
-				logrus.WithFields(logrus.Fields{
-					"id":    existing.ID,
-					"url":   finalURL,
-					"title": item.GetFinalTitle(),
-				}).Info("Updated existing bookmark")
+					logrus.WithFields(logrus.Fields{
+						"id":    existing.ID,
+						"url":   finalURL,
+						"title": item.GetFinalTitle(),
+					}).Info("Updated existing bookmark")
+				} else {
+					logrus.WithFields(logrus.Fields{
+						"url":   finalURL,
+						"title": item.GetFinalTitle(),
+					}).Info("Would update existing bookmark (no client provided)")
+				}
 			}
 
 			item.Status = StatusSuccess
+			item.WasUpdated = true // Flag to distinguish updates from new imports
 			return nil
 		}
 
@@ -102,25 +120,153 @@ func ProcessBookmark(item *ImportItem, client *linkding.Client, options ProcessO
 			"tags":  allTags,
 		}).Info("Would create new bookmark (dry run)")
 	} else {
-		_, err := client.CreateBookmark(
-			finalURL,
-			item.GetFinalTitle(),
-			item.GetFinalDescription(),
-			allTags,
-		)
-		if err != nil {
-			item.Status = StatusFailed
-			item.Error = err
-			return fmt.Errorf("failed to create bookmark: %w", err)
-		}
+		if client != nil {
+			_, err := client.CreateBookmark(
+				finalURL,
+				item.GetFinalTitle(),
+				item.GetFinalDescription(),
+				allTags,
+			)
+			if err != nil {
+				item.Status = StatusFailed
+				item.Error = err
+				return fmt.Errorf("failed to create bookmark: %w", err)
+			}
 
-		logrus.WithFields(logrus.Fields{
-			"url":   finalURL,
-			"title": item.GetFinalTitle(),
-			"tags":  allTags,
-		}).Info("Created new bookmark")
+			logrus.WithFields(logrus.Fields{
+				"url":   finalURL,
+				"title": item.GetFinalTitle(),
+				"tags":  allTags,
+			}).Info("Created new bookmark")
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"url":   finalURL,
+				"title": item.GetFinalTitle(),
+				"tags":  allTags,
+			}).Info("Would create new bookmark (no client provided)")
+		}
 	}
 
 	item.Status = StatusSuccess
 	return nil
+}
+
+// ProcessItems processes multiple import items concurrently using a worker pool
+func ProcessItems(items []*ImportItem, httpClient *feeds.HTTPClient, linkdingClient *linkding.Client, options ProcessOptions, concurrency int) *ImportStats {
+	logrus.WithFields(logrus.Fields{
+		"total_items":  len(items),
+		"concurrency":  concurrency,
+		"dry_run":      options.DryRun,
+		"duplicates":   options.DuplicateAction,
+		"global_tags":  options.Tags,
+	}).Info("Starting concurrent processing of import items")
+
+	stats := NewImportStats(len(items))
+	
+	// Create channels for work distribution
+	workQueue := make(chan *ImportItem, len(items))
+	
+	// Start worker goroutines
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			
+			logrus.WithField("worker_id", workerID).Debug("Worker started")
+			
+			for item := range workQueue {
+				// Step 1: URL Discovery
+				logrus.WithFields(logrus.Fields{
+					"worker_id": workerID,
+					"title":     item.Title,
+					"xml_url":   item.XMLURL,
+				}).Debug("Processing item in worker")
+				
+				err := DiscoverBookmarkURL(item, httpClient)
+				if err != nil {
+					logrus.WithFields(logrus.Fields{
+						"worker_id": workerID,
+						"title":     item.Title,
+						"error":     err.Error(),
+					}).Error("URL discovery failed")
+					
+					item.Status = StatusFailed
+					item.Error = err
+					stats.IncrementFailed()
+					stats.IncrementProcessed()
+					continue
+				}
+				
+				// Step 2: Process bookmark (create/update in Linkding)
+				err = ProcessBookmark(item, linkdingClient, options)
+				if err != nil {
+					logrus.WithFields(logrus.Fields{
+						"worker_id": workerID,
+						"title":     item.GetFinalTitle(),
+						"url":       item.GetFinalURL(),
+						"error":     err.Error(),
+					}).Error("Bookmark processing failed")
+					
+					item.Status = StatusFailed
+					item.Error = err
+					stats.IncrementFailed()
+				} else {
+					// Update stats based on item status
+					switch item.Status {
+					case StatusSuccess:
+						if item.WasUpdated {
+							stats.IncrementUpdated()
+						} else {
+							stats.IncrementImported()
+						}
+					case StatusSkipped:
+						stats.IncrementSkipped()
+					default:
+						// This shouldn't happen if ProcessBookmark works correctly
+						logrus.WithFields(logrus.Fields{
+							"worker_id": workerID,
+							"status":    item.Status,
+						}).Warn("Unexpected item status after processing")
+					}
+				}
+				
+				stats.IncrementProcessed()
+				
+				logrus.WithFields(logrus.Fields{
+					"worker_id":    workerID,
+					"title":        item.GetFinalTitle(),
+					"final_url":    item.GetFinalURL(),
+					"status":       item.Status,
+					"processed":    stats.Processed,
+					"total":        stats.Total,
+				}).Debug("Completed processing item")
+			}
+			
+			logrus.WithField("worker_id", workerID).Debug("Worker finished")
+		}(i)
+	}
+	
+	// Send all items to work queue
+	for _, item := range items {
+		workQueue <- item
+	}
+	close(workQueue)
+	
+	// Wait for all workers to complete
+	wg.Wait()
+	
+	stats.Finish()
+	
+	logrus.WithFields(logrus.Fields{
+		"total":     stats.Total,
+		"processed": stats.Processed,
+		"imported":  stats.Imported,
+		"updated":   stats.Updated,
+		"skipped":   stats.Skipped,
+		"failed":    stats.Failed,
+		"duration":  stats.Duration(),
+	}).Info("Completed concurrent processing")
+	
+	return stats
 }

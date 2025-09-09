@@ -7,6 +7,7 @@ import (
 
 	"linkding-to-opml/internal/feeds"
 	"linkding-to-opml/internal/importer"
+	"linkding-to-opml/internal/linkding"
 	"linkding-to-opml/internal/opml"
 
 	"github.com/spf13/cobra"
@@ -103,51 +104,20 @@ func runImport(cmd *cobra.Command, args []string) error {
 		MaxRedirects: 3,
 	})
 	
-	// Run URL discovery on all items
-	fmt.Printf("Running URL discovery...\n")
-	discoveryErrors := 0
-	for i, item := range items {
-		fmt.Printf("Processing %d/%d: %s\n", i+1, len(items), item.Title)
-		
-		err := importer.DiscoverBookmarkURL(item, httpClient)
-		if err != nil {
-			fmt.Printf("  Error: %s\n", err)
-			item.Status = importer.StatusFailed
-			item.Error = err
-			discoveryErrors++
-			continue
-		}
-		
-		fmt.Printf("  → %s\n", item.GetFinalURL())
-	}
+	// Test concurrent processing with worker pool (dry run mode)
+	fmt.Printf("Testing concurrent processing with %d workers...\n", concurrency)
 	
-	fmt.Printf("\nURL Discovery complete: %d successful, %d failed\n", len(items)-discoveryErrors, discoveryErrors)
-	
-	// Test processing without Linkding connection (dry run simulation)
-	fmt.Printf("Testing bookmark processing (simulated)...\n")
-	// processOptions will be used in full implementation with worker pools
-	_ = importer.ProcessOptions{
+	processOptions := importer.ProcessOptions{
 		DuplicateAction: duplicates,
 		Tags:            tags,
-		DryRun:          true, // Force dry run for testing
+		DryRun:          true, // Force dry run for testing (no real Linkding calls)
 	}
 	
-	stats := importer.NewImportStats(len(items))
-	for i, item := range items {
-		if item.Status == importer.StatusFailed {
-			stats.IncrementFailed()
-			continue
-		}
-		
-		fmt.Printf("Would process %d/%d: %s → %s\n", i+1, len(items), item.GetFinalTitle(), item.GetFinalURL())
-		
-		// Simulate processing
-		item.Status = importer.StatusSuccess
-		stats.IncrementProcessed()
-		stats.IncrementImported()
-	}
+	// Create dummy Linkding client (nil is OK for dry-run mode)
+	var linkdingClient *linkding.Client = nil
 	
-	stats.Finish()
+	stats := importer.ProcessItems(items, httpClient, linkdingClient, processOptions, concurrency)
+	
 	fmt.Printf("\n%s\n", stats.Summary())
 	
 	fmt.Printf("Configuration: Duplicates=%s, Tags=%v, Concurrency=%d\n", 
