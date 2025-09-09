@@ -3,13 +3,14 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"time"
 
+	"linkding-to-opml/internal/config"
 	"linkding-to-opml/internal/feeds"
 	"linkding-to-opml/internal/importer"
 	"linkding-to-opml/internal/linkding"
 	"linkding-to-opml/internal/opml"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -67,16 +68,41 @@ func runImport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("OPML file does not exist: %s", opmlFile)
 	}
 	
-	// Validate duplicates flag
+	// Load configuration
+	configFile := viper.GetString("config")
+	cfg, err := config.LoadConfig(configFile)
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+	
+	// Set up logging
+	cfg.SetupLogging()
+	
+	// Validate configuration (only if not in dry-run mode)
+	if !viper.GetBool("import.dry_run") {
+		if err := cfg.Validate(); err != nil {
+			return fmt.Errorf("configuration validation failed: %w", err)
+		}
+	}
+	
+	// Get import-specific flags
+	dryRun := viper.GetBool("import.dry_run")
 	duplicates := viper.GetString("import.duplicates")
+	tags := viper.GetStringSlice("import.tags")
+	concurrency := viper.GetInt("import.concurrency")
+	
+	// Validate duplicates flag
 	if duplicates != "skip" && duplicates != "update" {
 		return fmt.Errorf("invalid duplicates value: %s (must be 'skip' or 'update')", duplicates)
 	}
 	
-	// Get other flags
-	// dryRun := viper.GetBool("import.dry_run")  // Will be used in full implementation
-	tags := viper.GetStringSlice("import.tags")
-	concurrency := viper.GetInt("import.concurrency")
+	logrus.WithFields(logrus.Fields{
+		"opml_file":   opmlFile,
+		"dry_run":     dryRun,
+		"duplicates":  duplicates,
+		"tags":        tags,
+		"concurrency": concurrency,
+	}).Info("Starting OPML import")
 	
 	// Parse OPML file
 	opmlDoc, err := opml.ReadFile(opmlFile)
@@ -86,7 +112,12 @@ func runImport(cmd *cobra.Command, args []string) error {
 	
 	// Extract all feeds
 	feedEntries := opmlDoc.GetAllFeeds()
-	fmt.Printf("Found %d feed entries in OPML file\n", len(feedEntries))
+	logrus.WithField("feed_count", len(feedEntries)).Info("Extracted feed entries from OPML")
+	
+	if len(feedEntries) == 0 {
+		logrus.Warn("No feed entries found in OPML file")
+		return nil
+	}
 	
 	// Create import items
 	items := make([]*importer.ImportItem, len(feedEntries))
@@ -99,28 +130,60 @@ func runImport(cmd *cobra.Command, args []string) error {
 	
 	// Create HTTP client for feed fetching
 	httpClient := feeds.NewHTTPClient(feeds.HTTPConfig{
-		Timeout:      30 * time.Second,
-		UserAgent:    "linkding-to-opml/1.0",
-		MaxRedirects: 3,
+		Timeout:      cfg.HTTP.Timeout,
+		UserAgent:    cfg.HTTP.UserAgent,
+		MaxRedirects: cfg.HTTP.MaxRedirects,
 	})
 	
-	// Test concurrent processing with worker pool (dry run mode)
-	fmt.Printf("Testing concurrent processing with %d workers...\n", concurrency)
+	// Create Linkding client (unless dry-run mode)
+	var linkdingClient *linkding.Client
+	if !dryRun {
+		linkdingClient, err = linkding.NewClient(
+			cfg.Linkding.Token,
+			cfg.Linkding.URL,
+			cfg.Linkding.Timeout,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create Linkding client: %w", err)
+		}
+	}
 	
+	// Process items concurrently
 	processOptions := importer.ProcessOptions{
 		DuplicateAction: duplicates,
 		Tags:            tags,
-		DryRun:          true, // Force dry run for testing (no real Linkding calls)
+		DryRun:          dryRun,
 	}
 	
-	// Create dummy Linkding client (nil is OK for dry-run mode)
-	var linkdingClient *linkding.Client = nil
+	logrus.WithFields(logrus.Fields{
+		"total_items": len(items),
+		"concurrency": concurrency,
+		"dry_run":     dryRun,
+	}).Info("Starting concurrent processing")
 	
 	stats := importer.ProcessItems(items, httpClient, linkdingClient, processOptions, concurrency)
 	
-	fmt.Printf("\n%s\n", stats.Summary())
+	// Display final summary
+	if !cfg.Quiet {
+		fmt.Printf("\n%s\n", stats.Summary())
+	}
 	
-	fmt.Printf("Configuration: Duplicates=%s, Tags=%v, Concurrency=%d\n", 
-		duplicates, tags, concurrency)
+	// Log summary to structured logs as well
+	logrus.WithFields(logrus.Fields{
+		"total":     stats.Total,
+		"processed": stats.Processed,
+		"imported":  stats.Imported,
+		"updated":   stats.Updated,
+		"skipped":   stats.Skipped,
+		"failed":    stats.Failed,
+		"duration":  stats.Duration(),
+	}).Info("Import completed")
+	
+	// Return error if any items failed
+	if stats.Failed > 0 {
+		logrus.WithField("failed_count", stats.Failed).Error("Some items failed to import")
+		return fmt.Errorf("import completed with %d failures", stats.Failed)
+	}
+	
 	return nil
 }
