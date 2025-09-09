@@ -39,5 +39,13 @@ Branch: opml-to-linkding
 - Created `internal/importer/types.go` with ImportItem and ImportStats
 - Successfully tested with sample OPML file (3 feeds extracted correctly)
 
+#### Phase 3: URL Discovery ✅
+- Created `internal/feeds/fetcher.go` with enhanced RSS/Atom parsing
+- Implemented Feed, RSSFeed, and AtomFeed structs with website links
+- Added `FetchFeed()` function to retrieve and parse feeds
+- Created `internal/importer/discovery.go` with three-tier discovery logic
+- Implemented DiscoverBookmarkURL with htmlUrl → feed → fallback strategy
+- Successfully tested URL discovery (Tier 1: direct htmlUrl, Tier 2: feed parsing)
+
 ## Final Summary
 [To be completed at end of session]

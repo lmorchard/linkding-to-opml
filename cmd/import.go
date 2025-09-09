@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"linkding-to-opml/internal/feeds"
 	"linkding-to-opml/internal/importer"
 	"linkding-to-opml/internal/opml"
 
@@ -92,12 +94,38 @@ func runImport(cmd *cobra.Command, args []string) error {
 			FeedEntry: feed,
 			Status:    importer.StatusPending,
 		}
-		
-		fmt.Printf("  - %s: %s -> %s\n", feed.Title, feed.XMLURL, feed.HTMLURL)
 	}
 	
-	fmt.Printf("Import would process %d items\n", len(items))
-	fmt.Printf("Dry run: %t, Duplicates: %s, Tags: %v, Concurrency: %d\n", 
+	// Create HTTP client for feed fetching
+	httpClient := feeds.NewHTTPClient(feeds.HTTPConfig{
+		Timeout:      30 * time.Second,
+		UserAgent:    "linkding-to-opml/1.0",
+		MaxRedirects: 3,
+	})
+	
+	// Test URL discovery on the first few items
+	fmt.Printf("Testing URL discovery on first items:\n")
+	for i, item := range items {
+		if i >= 3 { // Only test first 3 items
+			break
+		}
+		
+		fmt.Printf("\nProcessing: %s\n", item.Title)
+		fmt.Printf("  XML URL: %s\n", item.XMLURL)
+		fmt.Printf("  HTML URL: %s\n", item.HTMLURL)
+		
+		err := importer.DiscoverBookmarkURL(item, httpClient)
+		if err != nil {
+			fmt.Printf("  Error: %s\n", err)
+			continue
+		}
+		
+		fmt.Printf("  Final URL: %s\n", item.GetFinalURL())
+		fmt.Printf("  Final Title: %s\n", item.GetFinalTitle())
+		fmt.Printf("  Final Description: %s\n", item.GetFinalDescription())
+	}
+	
+	fmt.Printf("\nDry run: %t, Duplicates: %s, Tags: %v, Concurrency: %d\n", 
 		dryRun, duplicates, tags, concurrency)
 	return nil
 }
