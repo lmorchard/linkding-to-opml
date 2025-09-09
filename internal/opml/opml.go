@@ -39,12 +39,13 @@ type Body struct {
 
 // Outline represents a feed entry in the OPML
 type Outline struct {
-	XMLName xml.Name `xml:"outline"`
-	Title   string   `xml:"title,attr"`
-	Text    string   `xml:"text,attr"`
-	XMLURL  string   `xml:"xmlUrl,attr"`
-	HTMLURL string   `xml:"htmlUrl,attr"`
-	Type    string   `xml:"type,attr,omitempty"`
+	XMLName  xml.Name  `xml:"outline"`
+	Title    string    `xml:"title,attr"`
+	Text     string    `xml:"text,attr"`
+	XMLURL   string    `xml:"xmlUrl,attr"`
+	HTMLURL  string    `xml:"htmlUrl,attr"`
+	Type     string    `xml:"type,attr,omitempty"`
+	Children []Outline `xml:"outline,omitempty"`
 }
 
 // GenerateOPML creates an OPML document from feed discovery results
@@ -191,4 +192,84 @@ func (o *OPML) GetStats() map[string]interface{} {
 		"outline_count": len(o.Body.Outlines),
 		"date_created":  o.Head.DateCreated,
 	}
+}
+
+// FeedEntry represents a feed entry extracted from OPML for importing
+type FeedEntry struct {
+	XMLURL      string
+	HTMLURL     string
+	Title       string
+	Description string
+}
+
+// ReadFile reads and parses an OPML file
+func ReadFile(filePath string) (*OPML, error) {
+	logrus.WithField("file_path", filePath).Debug("Reading OPML file")
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open OPML file: %w", err)
+	}
+	defer file.Close()
+
+	var opml OPML
+	decoder := xml.NewDecoder(file)
+	if err := decoder.Decode(&opml); err != nil {
+		return nil, fmt.Errorf("failed to parse OPML file: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"version":       opml.Version,
+		"title":         opml.Head.Title,
+		"outline_count": len(opml.Body.Outlines),
+	}).Info("Successfully parsed OPML file")
+
+	return &opml, nil
+}
+
+// GetAllFeeds recursively extracts all feed entries from the OPML, flattening the hierarchy
+func (o *OPML) GetAllFeeds() []FeedEntry {
+	var feeds []FeedEntry
+	
+	for _, outline := range o.Body.Outlines {
+		feeds = append(feeds, extractFeedsFromOutline(outline)...)
+	}
+	
+	logrus.WithField("feed_count", len(feeds)).Debug("Extracted all feeds from OPML")
+	return feeds
+}
+
+// extractFeedsFromOutline recursively extracts feeds from an outline and its children
+func extractFeedsFromOutline(outline Outline) []FeedEntry {
+	var feeds []FeedEntry
+	
+	// If this outline has an xmlUrl, it's a feed entry
+	if outline.XMLURL != "" {
+		title := outline.Title
+		if title == "" {
+			title = outline.Text
+		}
+		
+		feed := FeedEntry{
+			XMLURL:      outline.XMLURL,
+			HTMLURL:     outline.HTMLURL,
+			Title:       title,
+			Description: outline.Text,
+		}
+		
+		feeds = append(feeds, feed)
+		
+		logrus.WithFields(logrus.Fields{
+			"title":    feed.Title,
+			"xml_url":  feed.XMLURL,
+			"html_url": feed.HTMLURL,
+		}).Debug("Extracted feed entry from outline")
+	}
+	
+	// Recursively process children
+	for _, child := range outline.Children {
+		feeds = append(feeds, extractFeedsFromOutline(child)...)
+	}
+	
+	return feeds
 }

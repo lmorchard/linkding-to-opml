@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"linkding-to-opml/internal/importer"
+	"linkding-to-opml/internal/opml"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -72,7 +75,28 @@ func runImport(cmd *cobra.Command, args []string) error {
 	tags := viper.GetStringSlice("import.tags")
 	concurrency := viper.GetInt("import.concurrency")
 	
-	fmt.Printf("Import command placeholder - would import from: %s\n", opmlFile)
+	// Parse OPML file
+	opmlDoc, err := opml.ReadFile(opmlFile)
+	if err != nil {
+		return fmt.Errorf("failed to read OPML file: %w", err)
+	}
+	
+	// Extract all feeds
+	feedEntries := opmlDoc.GetAllFeeds()
+	fmt.Printf("Found %d feed entries in OPML file\n", len(feedEntries))
+	
+	// Create import items
+	items := make([]*importer.ImportItem, len(feedEntries))
+	for i, feed := range feedEntries {
+		items[i] = &importer.ImportItem{
+			FeedEntry: feed,
+			Status:    importer.StatusPending,
+		}
+		
+		fmt.Printf("  - %s: %s -> %s\n", feed.Title, feed.XMLURL, feed.HTMLURL)
+	}
+	
+	fmt.Printf("Import would process %d items\n", len(items))
 	fmt.Printf("Dry run: %t, Duplicates: %s, Tags: %v, Concurrency: %d\n", 
 		dryRun, duplicates, tags, concurrency)
 	return nil
