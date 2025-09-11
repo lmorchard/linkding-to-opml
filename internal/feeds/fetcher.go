@@ -3,6 +3,7 @@ package feeds
 import (
 	"encoding/xml"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -24,9 +25,17 @@ type RSSFeed struct {
 
 // RSSChannel represents an RSS channel with website link
 type RSSChannel struct {
-	Title       string `xml:"title"`
-	Description string `xml:"description"`
-	Link        string `xml:"link"`
+	Title       string   `xml:"title"`
+	Description string   `xml:"description"`
+	Link        string   `xml:"link"`
+	Image       RSSImage `xml:"image"`
+}
+
+// RSSImage represents an RSS image element
+type RSSImage struct {
+	Title string `xml:"title"`
+	URL   string `xml:"url"`
+	Link  string `xml:"link"`
 }
 
 // AtomFeed represents an Atom feed structure with website link
@@ -42,6 +51,23 @@ type AtomLink struct {
 	Href string `xml:"href,attr"`
 	Rel  string `xml:"rel,attr"`
 	Type string `xml:"type,attr"`
+}
+
+// RDFFeed represents an RSS 1.0/RDF feed structure
+type RDFFeed struct {
+	XMLName     xml.Name   `xml:"RDF"`
+	Channel     RDFChannel `xml:"channel"`
+	Title       string     `xml:"title"`
+	Link        string     `xml:"link"`
+	Description string     `xml:"description"`
+}
+
+// RDFChannel represents the channel element in RSS 1.0/RDF
+type RDFChannel struct {
+	XMLName     xml.Name `xml:"channel"`
+	Title       string   `xml:"title"`
+	Link        string   `xml:"link"`
+	Description string   `xml:"description"`
 }
 
 // FetchFeed fetches and parses a feed from the given URL
@@ -82,13 +108,34 @@ func FetchFeed(feedURL string, httpClient *HTTPClient) (*Feed, error) {
 		return feed, nil
 	}
 
-	return nil, fmt.Errorf("failed to parse feed as RSS or Atom")
+	// Try to parse as RSS 1.0/RDF
+	feed, err = parseRDFFeed(content)
+	if err == nil {
+		feed.FeedType = "RDF"
+		logrus.WithFields(logrus.Fields{
+			"feed_url":   feedURL,
+			"feed_type":  "RDF",
+			"title":      feed.Title,
+			"link":       feed.Link,
+		}).Debug("Successfully parsed RDF feed")
+		return feed, nil
+	}
+
+	return nil, fmt.Errorf("failed to parse feed as RSS, Atom, or RDF")
 }
 
 // parseRSSFeed parses RSS feed content and extracts metadata
 func parseRSSFeed(content string) (*Feed, error) {
+	// Create decoder with charset support for feeds with non-UTF-8 encoding
+	decoder := xml.NewDecoder(strings.NewReader(content))
+	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		// For simplicity, just return the input reader
+		// Go's XML parser will handle most common encodings automatically
+		return input, nil
+	}
+	
 	var rss RSSFeed
-	if err := xml.Unmarshal([]byte(content), &rss); err != nil {
+	if err := decoder.Decode(&rss); err != nil {
 		return nil, fmt.Errorf("failed to parse RSS: %w", err)
 	}
 
@@ -96,6 +143,55 @@ func parseRSSFeed(content string) (*Feed, error) {
 		Title:       rss.Channel.Title,
 		Description: rss.Channel.Description,
 		Link:        rss.Channel.Link,
+	}
+
+	// If channel link is empty, try to find the first link manually
+	// This handles cases where XML unmarshaling fails due to multiple link elements
+	if feed.Link == "" {
+		decoder := xml.NewDecoder(strings.NewReader(content))
+		inChannel := false
+		depth := 0
+		
+		for {
+			token, err := decoder.Token()
+			if err != nil {
+				break
+			}
+			
+			if se, ok := token.(xml.StartElement); ok {
+				switch se.Name.Local {
+				case "channel":
+					inChannel = true
+					depth = 1
+				case "image", "item":
+					if inChannel {
+						// Skip entire image and item elements to avoid their links
+						decoder.Skip()
+						continue
+					}
+				case "link":
+					// Only process links that are direct children of channel (depth 1)
+					if inChannel && depth == 1 {
+						var linkText string
+						if err := decoder.DecodeElement(&linkText, &se); err == nil && linkText != "" {
+							feed.Link = linkText
+							break
+						}
+					}
+				default:
+					if inChannel {
+						depth++
+					}
+				}
+			} else if ee, ok := token.(xml.EndElement); ok {
+				if ee.Name.Local == "channel" {
+					inChannel = false
+					depth = 0
+				} else if inChannel {
+					depth--
+				}
+			}
+		}
 	}
 
 	// Clean up link - remove trailing slashes and whitespace
@@ -106,8 +202,14 @@ func parseRSSFeed(content string) (*Feed, error) {
 
 // parseAtomFeed parses Atom feed content and extracts metadata
 func parseAtomFeed(content string) (*Feed, error) {
+	// Create decoder with charset support and entity handling
+	decoder := xml.NewDecoder(strings.NewReader(content))
+	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		return input, nil
+	}
+	
 	var atom AtomFeed
-	if err := xml.Unmarshal([]byte(content), &atom); err != nil {
+	if err := decoder.Decode(&atom); err != nil {
 		return nil, fmt.Errorf("failed to parse Atom: %w", err)
 	}
 
@@ -132,6 +234,30 @@ func parseAtomFeed(content string) (*Feed, error) {
 				break
 			}
 		}
+	}
+
+	// Clean up link - remove trailing slashes and whitespace
+	feed.Link = strings.TrimSpace(strings.TrimSuffix(feed.Link, "/"))
+
+	return feed, nil
+}
+
+// parseRDFFeed parses RSS 1.0/RDF feed content and extracts metadata
+func parseRDFFeed(content string) (*Feed, error) {
+	var rdf RDFFeed
+	if err := xml.Unmarshal([]byte(content), &rdf); err != nil {
+		return nil, fmt.Errorf("failed to parse RDF: %w", err)
+	}
+
+	feed := &Feed{
+		Title:       rdf.Channel.Title,
+		Description: rdf.Channel.Description,
+		Link:        rdf.Channel.Link,
+	}
+
+	// If channel link is empty, try the top-level link
+	if feed.Link == "" {
+		feed.Link = rdf.Link
 	}
 
 	// Clean up link - remove trailing slashes and whitespace

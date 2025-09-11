@@ -47,3 +47,6 @@ coverage.out
 tmp/
 
 .playwright-mcp/
+
+# Configuration files with secrets
+linkding-to-opml.yaml
