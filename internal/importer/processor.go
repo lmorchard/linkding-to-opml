@@ -3,6 +3,7 @@ package importer
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"linkding-to-opml/internal/feeds"
 	"linkding-to-opml/internal/linkding"
@@ -15,6 +16,7 @@ type ProcessOptions struct {
 	DuplicateAction string   // "skip" or "update"
 	Tags            []string // Tags to apply to all bookmarks
 	DryRun          bool     // If true, don't actually create/update bookmarks
+	RetryAttempts   int      // Number of retry attempts for failed operations
 }
 
 // ProcessBookmark processes a single import item, handling duplicates and creating/updating bookmarks
@@ -151,6 +153,58 @@ func ProcessBookmark(item *ImportItem, client *linkding.Client, options ProcessO
 	return nil
 }
 
+// retryOperation executes an operation with retry logic and exponential backoff
+func retryOperation(operation func() error, maxAttempts int, operationName string, item *ImportItem) error {
+	var lastErr error
+	
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := operation()
+		if err == nil {
+			// Success
+			if attempt > 1 {
+				logrus.WithFields(logrus.Fields{
+					"title":     item.GetFinalTitle(),
+					"url":       item.GetFinalURL(),
+					"operation": operationName,
+					"attempt":   attempt,
+					"max_attempts": maxAttempts,
+				}).Info("Operation succeeded after retry")
+			}
+			return nil
+		}
+		
+		lastErr = err
+		
+		if attempt < maxAttempts {
+			// Calculate exponential backoff: 1s, 2s, 4s, 8s, etc.
+			backoffDuration := time.Duration(1<<uint(attempt-1)) * time.Second
+			
+			logrus.WithFields(logrus.Fields{
+				"title":     item.GetFinalTitle(),
+				"url":       item.GetFinalURL(),
+				"operation": operationName,
+				"attempt":   attempt,
+				"max_attempts": maxAttempts,
+				"error":     err.Error(),
+				"backoff":   backoffDuration,
+			}).Warn("Operation failed, retrying after backoff")
+			
+			time.Sleep(backoffDuration)
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"title":     item.GetFinalTitle(),
+				"url":       item.GetFinalURL(),
+				"operation": operationName,
+				"attempt":   attempt,
+				"max_attempts": maxAttempts,
+				"error":     err.Error(),
+			}).Error("Operation failed after all retry attempts")
+		}
+	}
+	
+	return fmt.Errorf("operation failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
 // ProcessItems processes multiple import items concurrently using a worker pool
 func ProcessItems(items []*ImportItem, httpClient *feeds.HTTPClient, linkdingClient *linkding.Client, options ProcessOptions, concurrency int) *ImportStats {
 	logrus.WithFields(logrus.Fields{
@@ -176,20 +230,23 @@ func ProcessItems(items []*ImportItem, httpClient *feeds.HTTPClient, linkdingCli
 			logrus.WithField("worker_id", workerID).Debug("Worker started")
 			
 			for item := range workQueue {
-				// Step 1: URL Discovery
+				// Step 1: URL Discovery with retry
 				logrus.WithFields(logrus.Fields{
 					"worker_id": workerID,
 					"title":     item.Title,
 					"xml_url":   item.XMLURL,
 				}).Debug("Processing item in worker")
 				
-				err := DiscoverBookmarkURL(item, httpClient)
+				err := retryOperation(func() error {
+					return DiscoverBookmarkURL(item, httpClient)
+				}, options.RetryAttempts, "URL discovery", item)
+				
 				if err != nil {
 					logrus.WithFields(logrus.Fields{
 						"worker_id": workerID,
 						"title":     item.Title,
 						"error":     err.Error(),
-					}).Error("URL discovery failed")
+					}).Error("URL discovery failed after all retries")
 					
 					item.Status = StatusFailed
 					item.Error = err
@@ -198,15 +255,18 @@ func ProcessItems(items []*ImportItem, httpClient *feeds.HTTPClient, linkdingCli
 					continue
 				}
 				
-				// Step 2: Process bookmark (create/update in Linkding)
-				err = ProcessBookmark(item, linkdingClient, options)
+				// Step 2: Process bookmark (create/update in Linkding) with retry
+				err = retryOperation(func() error {
+					return ProcessBookmark(item, linkdingClient, options)
+				}, options.RetryAttempts, "bookmark processing", item)
+				
 				if err != nil {
 					logrus.WithFields(logrus.Fields{
 						"worker_id": workerID,
 						"title":     item.GetFinalTitle(),
 						"url":       item.GetFinalURL(),
 						"error":     err.Error(),
-					}).Error("Bookmark processing failed")
+					}).Error("Bookmark processing failed after all retries")
 					
 					item.Status = StatusFailed
 					item.Error = err

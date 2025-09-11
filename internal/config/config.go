@@ -35,8 +35,9 @@ type Config struct {
 	Output string `mapstructure:"output"`
 
 	// Processing settings
-	Tags        []string `mapstructure:"tags"`
-	Concurrency int      `mapstructure:"concurrency"`
+	Tags          []string `mapstructure:"tags"`
+	Concurrency   int      `mapstructure:"concurrency"`
+	RetryAttempts int      `mapstructure:"retry_attempts"`
 
 	// Logging settings
 	Verbose bool `mapstructure:"verbose"`
@@ -55,6 +56,7 @@ func LoadConfig(configFile string) (*Config, error) {
 	viper.SetDefault("cache.max_age", 720) // 30 days in hours
 	viper.SetDefault("output", "feeds.opml")
 	viper.SetDefault("concurrency", 16)
+	viper.SetDefault("retry_attempts", 5)
 	viper.SetDefault("http.timeout", "30s")
 	viper.SetDefault("http.user_agent", "Mozilla/5.0 (compatible; linkding-to-opml/1.0)")
 	viper.SetDefault("http.max_redirects", 3)
