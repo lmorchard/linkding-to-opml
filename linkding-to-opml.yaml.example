@@ -47,6 +47,10 @@ concurrency: 16
 # Number of retry attempts for failed operations (optional, default: 3)
 retry_attempts: 3
 
+# Delay between successful bookmark creations (optional, default: 100ms)
+# Helps prevent API rate limiting and reduces server load
+bookmark_delay: "100ms"
+
 # Logging configuration
 # Enable verbose logging (optional, default: false)
 verbose: false

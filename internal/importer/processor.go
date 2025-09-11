@@ -13,10 +13,11 @@ import (
 
 // ProcessOptions contains options for processing bookmarks
 type ProcessOptions struct {
-	DuplicateAction string   // "skip" or "update"
-	Tags            []string // Tags to apply to all bookmarks
-	DryRun          bool     // If true, don't actually create/update bookmarks
-	RetryAttempts   int      // Number of retry attempts for failed operations
+	DuplicateAction string        // "skip" or "update"
+	Tags            []string      // Tags to apply to all bookmarks
+	DryRun          bool          // If true, don't actually create/update bookmarks
+	RetryAttempts   int           // Number of retry attempts for failed operations
+	BookmarkDelay   time.Duration // Delay between successful bookmark creations
 }
 
 // ProcessBookmark processes a single import item, handling duplicates and creating/updating bookmarks
@@ -280,6 +281,17 @@ func ProcessItems(items []*ImportItem, httpClient *feeds.HTTPClient, linkdingCli
 						} else {
 							stats.IncrementImported()
 						}
+						
+						// Apply delay after successful bookmark creation/update (but not for dry-run)
+						if !options.DryRun && options.BookmarkDelay > 0 {
+							logrus.WithFields(logrus.Fields{
+								"worker_id": workerID,
+								"delay":     options.BookmarkDelay,
+								"title":     item.GetFinalTitle(),
+							}).Debug("Applying bookmark delay after successful operation")
+							time.Sleep(options.BookmarkDelay)
+						}
+						
 					case StatusSkipped:
 						stats.IncrementSkipped()
 					default:

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"linkding-to-opml/internal/config"
 	"linkding-to-opml/internal/feeds"
@@ -53,6 +54,7 @@ func init() {
 	importCmd.Flags().StringSlice("tags", []string{}, "Comma-separated tags to apply to all imported bookmarks")
 	importCmd.Flags().Int("concurrency", 16, "Number of concurrent workers for web fetching")
 	importCmd.Flags().Int("retry-attempts", 3, "Number of retry attempts for failed operations")
+	importCmd.Flags().Duration("bookmark-delay", 100*time.Millisecond, "Delay between successful bookmark creations")
 
 	// Bind flags to viper
 	_ = viper.BindPFlag("import.dry_run", importCmd.Flags().Lookup("dry-run"))
@@ -60,6 +62,7 @@ func init() {
 	_ = viper.BindPFlag("import.tags", importCmd.Flags().Lookup("tags"))
 	_ = viper.BindPFlag("import.concurrency", importCmd.Flags().Lookup("concurrency"))
 	_ = viper.BindPFlag("retry_attempts", importCmd.Flags().Lookup("retry-attempts"))
+	_ = viper.BindPFlag("bookmark_delay", importCmd.Flags().Lookup("bookmark-delay"))
 }
 
 func runImport(cmd *cobra.Command, args []string) error {
@@ -93,6 +96,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 	tags := viper.GetStringSlice("import.tags")
 	concurrency := viper.GetInt("import.concurrency")
 	retryAttempts := cfg.RetryAttempts
+	bookmarkDelay := cfg.BookmarkDelay
 	
 	// Validate duplicates flag
 	if duplicates != "skip" && duplicates != "update" {
@@ -106,6 +110,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 		"tags":           tags,
 		"concurrency":    concurrency,
 		"retry_attempts": retryAttempts,
+		"bookmark_delay": bookmarkDelay,
 	}).Info("Starting OPML import")
 	
 	// Parse OPML file
@@ -158,6 +163,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 		Tags:            tags,
 		DryRun:          dryRun,
 		RetryAttempts:   retryAttempts,
+		BookmarkDelay:   bookmarkDelay,
 	}
 	
 	logrus.WithFields(logrus.Fields{
