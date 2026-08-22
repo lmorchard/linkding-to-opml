@@ -178,12 +178,12 @@ func retryOperation(operation func() error, maxAttempts int, operationName strin
 			backoffDelay := time.Duration(attempt) * time.Second
 
 			logrus.WithFields(logrus.Fields{
-				"title":      item.Title,
-				"url":        item.GetFinalURL(),
-				"operation":  operationName,
-				"attempt":    attempt,
-				"error":      err.Error(),
-				"retry_in":   backoffDelay,
+				"title":     item.Title,
+				"url":       item.GetFinalURL(),
+				"operation": operationName,
+				"attempt":   attempt,
+				"error":     err.Error(),
+				"retry_in":  backoffDelay,
 			}).Warn("Operation failed, retrying")
 
 			time.Sleep(backoffDelay)

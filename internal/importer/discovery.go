@@ -23,7 +23,7 @@ func DiscoverBookmarkURL(item *ImportItem, httpClient *feeds.HTTPClient) error {
 			"title":    item.Title,
 			"html_url": item.HTMLURL,
 		}).Debug("Using htmlUrl from OPML")
-		
+
 		item.UpdateWithDiscoveredData(item.HTMLURL, item.Title, item.Description)
 		return nil
 	}
@@ -48,18 +48,18 @@ func DiscoverBookmarkURL(item *ImportItem, httpClient *feeds.HTTPClient) error {
 				"website_link": feed.Link,
 				"feed_type":    feed.FeedType,
 			}).Debug("Discovered website link from feed")
-			
+
 			// Use feed metadata if available
 			title := item.Title
 			if feed.Title != "" {
 				title = feed.Title
 			}
-			
+
 			description := item.Description
 			if feed.Description != "" {
 				description = feed.Description
 			}
-			
+
 			item.UpdateWithDiscoveredData(feed.Link, title, description)
 			return nil
 		}
@@ -84,10 +84,10 @@ func ValidateURL(url string) error {
 	if url == "" {
 		return fmt.Errorf("URL is empty")
 	}
-	
+
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return fmt.Errorf("URL must start with http:// or https://")
 	}
-	
+
 	return nil
 }

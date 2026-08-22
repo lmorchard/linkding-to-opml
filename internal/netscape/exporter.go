@@ -138,8 +138,8 @@ func (e *Exporter) writeBookmark(bookmark Bookmark) error {
 	}
 
 	// Add Linkding-specific attributes to match their export format
-	sb.WriteString(" PRIVATE=\"0\"")   // Not private by default
-	sb.WriteString(" TOREAD=\"0\"")    // Not marked as "to read" by default
+	sb.WriteString(" PRIVATE=\"0\"") // Not private by default
+	sb.WriteString(" TOREAD=\"0\"")  // Not marked as "to read" by default
 
 	// Add tags as a TAGS attribute (linkding specific)
 	if len(bookmark.Tags) > 0 {

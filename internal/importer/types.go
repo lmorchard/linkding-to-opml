@@ -52,14 +52,14 @@ type ImportItem struct {
 // UpdateWithDiscoveredData updates the item with discovered URL and metadata
 func (item *ImportItem) UpdateWithDiscoveredData(url, title, description string) {
 	item.DiscoveredURL = url
-	
+
 	// Use discovered title if available, otherwise fall back to original
 	if title != "" {
 		item.DiscoveredTitle = title
 	} else {
 		item.DiscoveredTitle = item.Title
 	}
-	
+
 	// Use discovered description if available, otherwise fall back to original
 	if description != "" {
 		item.DiscoveredDescription = description
@@ -99,7 +99,7 @@ func (item *ImportItem) GetFinalDescription() string {
 type ImportStats struct {
 	StartTime time.Time
 	EndTime   time.Time
-	
+
 	Total     int64
 	Processed int64
 	Imported  int64
@@ -157,7 +157,7 @@ func (s *ImportStats) Duration() time.Duration {
 // Summary returns a formatted summary of the import statistics
 func (s *ImportStats) Summary() string {
 	duration := s.Duration()
-	
+
 	return fmt.Sprintf(`Import Summary:
   Total entries: %d
   Processed: %d

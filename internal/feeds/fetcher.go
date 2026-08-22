@@ -40,10 +40,10 @@ type RSSImage struct {
 
 // AtomFeed represents an Atom feed structure with website link
 type AtomFeed struct {
-	XMLName xml.Name    `xml:"feed"`
-	Title   string      `xml:"title"`
-	Summary string      `xml:"subtitle"`
-	Links   []AtomLink  `xml:"link"`
+	XMLName xml.Name   `xml:"feed"`
+	Title   string     `xml:"title"`
+	Summary string     `xml:"subtitle"`
+	Links   []AtomLink `xml:"link"`
 }
 
 // AtomLink represents a link in an Atom feed
@@ -87,10 +87,10 @@ func FetchFeed(feedURL string, httpClient *HTTPClient) (*Feed, error) {
 	if err == nil {
 		feed.FeedType = "RSS"
 		logrus.WithFields(logrus.Fields{
-			"feed_url":   feedURL,
-			"feed_type":  "RSS",
-			"title":      feed.Title,
-			"link":       feed.Link,
+			"feed_url":  feedURL,
+			"feed_type": "RSS",
+			"title":     feed.Title,
+			"link":      feed.Link,
 		}).Debug("Successfully parsed RSS feed")
 		return feed, nil
 	}
@@ -100,10 +100,10 @@ func FetchFeed(feedURL string, httpClient *HTTPClient) (*Feed, error) {
 	if err == nil {
 		feed.FeedType = "Atom"
 		logrus.WithFields(logrus.Fields{
-			"feed_url":   feedURL,
-			"feed_type":  "Atom", 
-			"title":      feed.Title,
-			"link":       feed.Link,
+			"feed_url":  feedURL,
+			"feed_type": "Atom",
+			"title":     feed.Title,
+			"link":      feed.Link,
 		}).Debug("Successfully parsed Atom feed")
 		return feed, nil
 	}
@@ -113,10 +113,10 @@ func FetchFeed(feedURL string, httpClient *HTTPClient) (*Feed, error) {
 	if err == nil {
 		feed.FeedType = "RDF"
 		logrus.WithFields(logrus.Fields{
-			"feed_url":   feedURL,
-			"feed_type":  "RDF",
-			"title":      feed.Title,
-			"link":       feed.Link,
+			"feed_url":  feedURL,
+			"feed_type": "RDF",
+			"title":     feed.Title,
+			"link":      feed.Link,
 		}).Debug("Successfully parsed RDF feed")
 		return feed, nil
 	}
@@ -133,7 +133,7 @@ func parseRSSFeed(content string) (*Feed, error) {
 		// Go's XML parser will handle most common encodings automatically
 		return input, nil
 	}
-	
+
 	var rss RSSFeed
 	if err := decoder.Decode(&rss); err != nil {
 		return nil, fmt.Errorf("failed to parse RSS: %w", err)
@@ -151,13 +151,13 @@ func parseRSSFeed(content string) (*Feed, error) {
 		decoder := xml.NewDecoder(strings.NewReader(content))
 		inChannel := false
 		depth := 0
-		
+
 		for {
 			token, err := decoder.Token()
 			if err != nil {
 				break
 			}
-			
+
 			if se, ok := token.(xml.StartElement); ok {
 				switch se.Name.Local {
 				case "channel":
@@ -209,7 +209,7 @@ func parseAtomFeed(content string) (*Feed, error) {
 	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
 		return input, nil
 	}
-	
+
 	var atom AtomFeed
 	if err := decoder.Decode(&atom); err != nil {
 		return nil, fmt.Errorf("failed to parse Atom: %w", err)
