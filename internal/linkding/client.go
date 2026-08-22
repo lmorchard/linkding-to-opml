@@ -45,54 +45,101 @@ func NewClient(token, url string, timeout time.Duration) (*Client, error) {
 	}, nil
 }
 
-// FetchBookmarks fetches bookmarks from Linkding, optionally filtered by tags
+// pageSize is the number of bookmarks requested per API call. Linkding pages
+// every list response, so the full set must be walked one page at a time.
+const pageSize = 500
+
+// FetchBookmarks fetches bookmarks from Linkding, optionally filtered by tags.
+//
+// Linkding never returns the whole collection in a single response, so this
+// pages until every record has been read. Tag filtering is pushed to the server
+// via the search query (which matches tags exactly and ANDs multiple tags), and
+// the results are re-checked client-side by matchesTags.
 func (c *Client) FetchBookmarks(tags []string) ([]*Bookmark, error) {
 	logrus.WithField("tags", tags).Info("Fetching bookmarks from Linkding API")
 
-	// Use linkding client to fetch bookmarks
-	// For now, we'll get all bookmarks and filter client-side
-	// The go-linkding library may support server-side filtering in the future
-	bookmarkList, err := c.client.ListBookmarks(linkding.ListBookmarksParams{
-		Limit:  1000, // Get lots of bookmarks (adjust as needed)
-		Offset: 0,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch bookmarks from Linkding: %w", err)
-	}
+	query := buildTagQuery(tags)
 
 	var filteredBookmarks []*Bookmark
+	totalFetched := 0
+	offset := 0
 
-	// Convert and filter bookmarks
-	for _, bookmark := range bookmarkList.Results {
-		// Convert linkding bookmark to our internal format
-		bookmarkTags := make([]string, len(bookmark.TagNames))
-		copy(bookmarkTags, bookmark.TagNames)
-
-		internalBookmark := &Bookmark{
-			ID:    bookmark.ID,
-			URL:   bookmark.URL,
-			Title: bookmark.Title,
-			Tags:  bookmarkTags,
+	for {
+		bookmarkList, err := c.client.ListBookmarks(linkding.ListBookmarksParams{
+			Query:  query,
+			Limit:  pageSize,
+			Offset: offset,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch bookmarks from Linkding: %w", err)
 		}
 
-		// Apply tag filtering if tags are specified
-		if len(tags) > 0 {
-			if c.matchesTags(internalBookmark, tags) {
+		// An empty page means the server has nothing further to give, even if
+		// its reported count disagrees. Without this the loop could not end.
+		if len(bookmarkList.Results) == 0 {
+			break
+		}
+
+		totalFetched += len(bookmarkList.Results)
+
+		// Convert and filter bookmarks
+		for _, bookmark := range bookmarkList.Results {
+			// Convert linkding bookmark to our internal format
+			bookmarkTags := make([]string, len(bookmark.TagNames))
+			copy(bookmarkTags, bookmark.TagNames)
+
+			internalBookmark := &Bookmark{
+				ID:    bookmark.ID,
+				URL:   bookmark.URL,
+				Title: bookmark.Title,
+				Tags:  bookmarkTags,
+			}
+
+			// Apply tag filtering if tags are specified
+			if len(tags) > 0 {
+				if c.matchesTags(internalBookmark, tags) {
+					filteredBookmarks = append(filteredBookmarks, internalBookmark)
+				}
+			} else {
+				// No filtering - include all bookmarks
 				filteredBookmarks = append(filteredBookmarks, internalBookmark)
 			}
-		} else {
-			// No filtering - include all bookmarks
-			filteredBookmarks = append(filteredBookmarks, internalBookmark)
 		}
+
+		offset += len(bookmarkList.Results)
+		if offset >= bookmarkList.Count {
+			break
+		}
+
+		logrus.WithFields(logrus.Fields{
+			"fetched": offset,
+			"total":   bookmarkList.Count,
+		}).Debug("Fetched a page of bookmarks, continuing")
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"total_fetched": len(bookmarkList.Results),
+		"total_fetched": totalFetched,
 		"after_filter":  len(filteredBookmarks),
 		"filter_tags":   tags,
 	}).Info("Successfully fetched and filtered bookmarks")
 
 	return filteredBookmarks, nil
+}
+
+// buildTagQuery renders tags into a Linkding search query. Linkding treats a
+// "#tag" token as an exact tag match and ANDs multiple tokens together, which
+// matches the semantics of matchesTags. Tags containing whitespace cannot be
+// expressed as a query token, so they are left to client-side filtering.
+func buildTagQuery(tags []string) string {
+	var tokens []string
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" || strings.ContainsAny(tag, " \t") {
+			continue
+		}
+		tokens = append(tokens, "#"+tag)
+	}
+	return strings.Join(tokens, " ")
 }
 
 // matchesTags checks if a bookmark has ALL the specified tags (AND operation)
