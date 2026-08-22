@@ -71,9 +71,25 @@ func GenerateOPML(results []*feeds.FeedDiscoveryResult, title string) *OPML {
 		},
 	}
 
+	// Several bookmarks on one site commonly resolve to that site's single
+	// feed. Emitting an outline per bookmark would subscribe a reader to the
+	// same feed repeatedly, so keep only the first result for each feed URL.
+	seenFeedURLs := make(map[string]bool, len(results))
+	duplicates := 0
+
 	// Convert feed discovery results to OPML outlines
 	for _, result := range results {
 		if result.IsSuccessful() {
+			if seenFeedURLs[result.FeedURL] {
+				duplicates++
+				logrus.WithFields(logrus.Fields{
+					"feed_url": result.FeedURL,
+					"html_url": result.URL,
+				}).Debug("Skipped duplicate feed in OPML")
+				continue
+			}
+			seenFeedURLs[result.FeedURL] = true
+
 			outline := Outline{
 				Title:   result.FeedTitle,
 				Text:    result.FeedTitle,
@@ -92,7 +108,10 @@ func GenerateOPML(results []*feeds.FeedDiscoveryResult, title string) *OPML {
 		}
 	}
 
-	logrus.WithField("outline_count", len(opml.Body.Outlines)).Info("Generated OPML document")
+	logrus.WithFields(logrus.Fields{
+		"outline_count":     len(opml.Body.Outlines),
+		"duplicates_merged": duplicates,
+	}).Info("Generated OPML document")
 
 	return opml
 }
@@ -230,11 +249,11 @@ func ReadFile(filePath string) (*OPML, error) {
 // GetAllFeeds recursively extracts all feed entries from the OPML, flattening the hierarchy
 func (o *OPML) GetAllFeeds() []FeedEntry {
 	var feeds []FeedEntry
-	
+
 	for _, outline := range o.Body.Outlines {
 		feeds = append(feeds, extractFeedsFromOutline(outline)...)
 	}
-	
+
 	logrus.WithField("feed_count", len(feeds)).Debug("Extracted all feeds from OPML")
 	return feeds
 }
@@ -242,34 +261,34 @@ func (o *OPML) GetAllFeeds() []FeedEntry {
 // extractFeedsFromOutline recursively extracts feeds from an outline and its children
 func extractFeedsFromOutline(outline Outline) []FeedEntry {
 	var feeds []FeedEntry
-	
+
 	// If this outline has an xmlUrl, it's a feed entry
 	if outline.XMLURL != "" {
 		title := outline.Title
 		if title == "" {
 			title = outline.Text
 		}
-		
+
 		feed := FeedEntry{
 			XMLURL:      outline.XMLURL,
 			HTMLURL:     outline.HTMLURL,
 			Title:       title,
 			Description: outline.Text,
 		}
-		
+
 		feeds = append(feeds, feed)
-		
+
 		logrus.WithFields(logrus.Fields{
 			"title":    feed.Title,
 			"xml_url":  feed.XMLURL,
 			"html_url": feed.HTMLURL,
 		}).Debug("Extracted feed entry from outline")
 	}
-	
+
 	// Recursively process children
 	for _, child := range outline.Children {
 		feeds = append(feeds, extractFeedsFromOutline(child)...)
 	}
-	
+
 	return feeds
 }
